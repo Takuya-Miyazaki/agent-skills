@@ -165,23 +165,6 @@ Walk through every row in the navigation map from Step 1 and confirm:
 - Do persistent elements stay static (not sliding with page content)?
 - Do Suspense reveals animate independently from directional navigations?
 
-If any path produces no animation or competing animations, revisit the relevant step.
-
----
-
-## Common Mistakes
-
-- **Bare `<ViewTransition>` without props** — without `default="none"`, it fires the browser's default cross-fade on every transition (every navigation, every Suspense resolve, every revalidation). Always set `default="none"` and explicitly enable only the triggers you want.
-- **Directional `<ViewTransition>` in a layout** — layouts persist across navigations and never unmount/remount. `enter`/`exit` props won't fire on route changes. Place the outer type-keyed `<ViewTransition>` in each page component.
-- **Fade-out exit with shared element morphs** — the page dissolving conflicts with the morph. Use a directional slide exit instead.
-- **Copying every CSS recipe** — broad rules animate surfaces the app never intended to include. Start from the official example for the chosen pattern, then add only the focused recipes the audit requires.
-- **Missing `default: "none"` in type-keyed objects** — TypeScript requires a `default` key, and without it the fallback is `"auto"` which fires on every transition.
-- **Type maps on Suspense reveals** — Suspense resolves fire as separate transitions with no type. Type-keyed props won't match — use simple string props instead.
-- **Raw `viewTransitionName` CSS to trigger animations** — React only calls `document.startViewTransition` when `<ViewTransition>` components are in the tree. A bare `viewTransitionName` style is for isolating elements from a parent's snapshot, not for triggering animations.
-- **`update` trigger for same-route navigations** — nested VTs inside the content steal the mutation from the parent, so `update` never fires on the outer VT. Use `key` + `name` + `share` instead.
-- **Named VT in a reusable component** — if a component with a named VT is rendered in both a modal/popover *and* a page, both mount simultaneously and break the morph. Make the name conditional or move it to the specific consumer.
-- **`router.back()` for back navigation** — traversals carry no transition types, so type-keyed animations don't play (untyped morphs still can). Use `router.push()` with an explicit URL for a fully animated back affordance.
-
----
+If any path produces no animation or competing animations, use the symptom-driven [troubleshooting guide](troubleshooting.md).
 
 For Next.js-specific implementation steps (`transitionTypes` on `<Link>`, prefetch behavior, and same-route dynamic segments), see [nextjs.md](nextjs.md).

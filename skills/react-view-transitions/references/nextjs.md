@@ -8,6 +8,8 @@ Read the current [Next.js View Transitions guide](https://nextjs.org/docs/app/gu
 
 Because every link click is a transition, any VT with `default="auto"` fires on **every** navigation — use `default="none"` to prevent competing animations.
 
+For unexpected or broken animation behavior, see [troubleshooting.md](troubleshooting.md).
+
 ---
 
 ## Next.js Implementation Additions
@@ -223,12 +225,6 @@ When navigating between dynamic segments of the same route (e.g., `/collection/[
 - `key={slug}` forces unmount/remount on change
 - The stable `name` pairs the outgoing and incoming containers; `share="auto"` creates the crossfade
 - VT inside `<Suspense>` (without keying Suspense) keeps old content visible during loading
-
----
-
-## Nested enter/exit — `parentEnter` / `parentExit` (experimental)
-
-Lifts the "nested VTs don't fire enter/exit inside a parent" rule: a nested VT can animate when its **parent** enters/exits (`parentEnter`/`parentExit`, `onParentEnter`/`onParentExit`; `parentEnter="none"` stops propagation). Experimental-channel only today; SSR support landed in React PR #36917 ([commit](https://github.com/facebook/react/commit/83840902c890f0eb85decda239ef6b1b14945779)). Verify it's in the React your app runs: `grep -c "parentEnter" node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.production.js` — 0 means unavailable (Next uses the experimental channel only when `gestureTransition`/`blockingSSR`/`taint`/`transitionIndicator` is set).
 
 ## Server Components
 

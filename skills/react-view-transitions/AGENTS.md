@@ -10,83 +10,323 @@ Vercel Engineering
 
 ---
 
-Use React's View Transition integration to communicate continuity, hierarchy, or content arrival. Do not add motion without a clear meaning.
+Animate between UI states using the browser's native `document.startViewTransition`. Declare *what* with `<ViewTransition>`, trigger *when* with `startTransition` / `useDeferredValue` / `Suspense`, control *how* with CSS classes. Unsupported browsers skip animations gracefully.
 
-## Read Current Documentation First
+## When to Animate
 
-The APIs are evolving. Use the official references instead of reproducing their API documentation from memory:
+Every `<ViewTransition>` should communicate a spatial relationship or continuity. If you can't articulate what it communicates, don't add it.
 
-- [React `<ViewTransition>`](https://react.dev/reference/react/ViewTransition)
-- [React `addTransitionType`](https://react.dev/reference/react/addTransitionType)
-- [Next.js View Transitions guide](https://nextjs.org/docs/app/guides/view-transitions)
-- [Next.js `<Link>` `transitionTypes`](https://nextjs.org/docs/app/api-reference/components/link#transitiontypes)
-- [Next.js `useRouter`](https://nextjs.org/docs/app/api-reference/functions/use-router)
+Implement **all** applicable patterns from this list, in this order:
 
-For Next.js, also read the matching guide under `node_modules/next/dist/docs/`. The installed version is authoritative for configuration and signatures.
+| Priority | Pattern | What it communicates |
+|----------|---------|---------------------|
+| 1 | **Shared element** (`name`) | "Same thing — going deeper" |
+| 2 | **Suspense reveal** | "Data loaded" |
+| 3 | **List identity** (per-item `key`) | "Same items, new arrangement" |
+| 4 | **State change** (`enter`/`exit`) | "Something appeared/disappeared" |
+| 5 | **Route change** (page-level) | "Going to a new place" |
 
-## Workflow
+This is an implementation order, not a "pick one" list. Implement every pattern that fits the app. Only skip a pattern if the app has no use case for it.
 
-1. Audit the update trigger, participating VTs, mount/persist/unmount behavior, Suspense boundaries, and persistent chrome.
-2. Implement the smallest semantic pattern first.
-3. Add only the CSS recipes that pattern needs.
-4. Verify warm and cold navigation, history traversal, fallback reveals, unrelated updates, and reduced motion.
+### Choosing Animation Style
 
-For a whole-app rollout, follow [references/implementation.md](references/implementation.md). For focused work, load only the relevant reference:
+| Context | Animation | Why |
+|---------|-----------|-----|
+| Hierarchical navigation (list → detail) | Type-keyed `nav-forward` / `nav-back` | Communicates spatial depth |
+| Lateral navigation (tab-to-tab) | Bare `<ViewTransition>` (fade) or `default="none"` | No depth to communicate |
+| Suspense reveal | `enter`/`exit` string props | Content arriving |
+| Revalidation / background refresh | `default="none"` | Silent — no animation needed |
 
-| Need | Reference |
-|---|---|
-| Production patterns | [references/patterns.md](references/patterns.md) |
-| Unexpected or broken animation behavior | [references/troubleshooting.md](references/troubleshooting.md) |
-| Next.js routing and prefetch behavior | [references/nextjs.md](references/nextjs.md) |
-| Reusable CSS | [references/css-recipes.md](references/css-recipes.md) |
+Reserve directional slides for hierarchical navigation (list → detail) and ordered sequences (prev/next photo, carousel, paginated results). For ordered sequences, the direction communicates position: "next" slides from right, "previous" from left. Lateral/unordered navigation (tab-to-tab) should not use directional slides — it falsely implies spatial depth.
 
-## Choose by Meaning
+---
 
-| Intent | Pattern |
-|---|---|
-| Same object across views | Matching `name` and `share` |
-| Data arrived | Suspense reveal |
-| Same items moved | Keyed item VTs with `update` enabled |
-| Component appeared/disappeared | `enter` / `exit` |
-| Hierarchical navigation | Type-keyed forward/back animation |
-| Same place, different content | Update or shared crossfade |
+## Availability
 
-Shared identity and list identity are separate. A list item containing a shared image can need an outer keyed VT for reorder and an inner named VT for the cross-route morph.
+- **Next.js:** Do **not** install `react@canary` — the App Router already bundles React canary internally. `ViewTransition` works out of the box. `npm ls react` may show a stable-looking version; this is expected.
+- **Without Next.js:** Install `react@canary react-dom@canary` (`ViewTransition` is not in stable React).
+- Browser support: Chromium 125+ (React needs the v2 object form of `startViewTransition`), Firefox 144+, Safari 18.2+. Graceful degradation on unsupported browsers.
 
-## Guardrails
+---
 
-- Let React call `document.startViewTransition`; do not call it directly in React code.
-- State-driven VTs need a React Transition, Suspense, or deferred update. Ordinary `setState` does not activate them.
-- Treat `name` as global identity. It must be unique among simultaneously mounted elements.
-- `default="none"` disables unspecified triggers, including `update` and `share`; opt required triggers back in.
-- Type maps need a `default`. Suspense reveals happen in a later untyped transition, so reveal VTs normally use string props.
-- A raw `viewTransitionName` isolates an element; it does not start a transition. `viewTransitionName: "none"` is no isolation.
-- Keep route enter/exit boundaries in pages unless a persistent layout is intentionally the animated subject.
-- Prefer opacity-only crossfades. Reserve blur for a deliberate morph.
-- Always include reduced-motion CSS.
+## Implementation Workflow
 
-## Patterns Learned from Production Apps
+When adding view transitions to an existing app, **follow [references/implementation.md](references/implementation.md) step by step.** Start with the audit — do not skip it. Use [references/css-recipes.md](references/css-recipes.md) for the applicable CSS and adapt it to the app.
 
-The detailed implementations live in the references; these are the cases most often missed:
+---
 
-- **Optimistic controls:** update labels and pending styles optimistically, but keep named shared indicators tied to committed route state.
-- **Layout displacement:** wrap the sibling that moves, not only the content whose size changed.
-- **Persistent and portaled UI:** isolate fixed chrome and floating surfaces with stable names. For third-party portals, name an always-mounted owner.
-- **Fallback/content duplicates:** move repeated headings and controls outside Suspense, or give them deliberate shared identity, to avoid an opacity dip.
-- **Live app shells:** disable the root snapshot animation when unnamed persistent chrome must stay live and interactive.
+## Core Concepts
 
-## Verification
+### The `<ViewTransition>` Component
 
-Check the behavior users see:
+```jsx
+import { ViewTransition } from 'react';
 
-- prefetched/warm navigation and cold/suspended navigation;
-- forward links, programmatic navigation, and browser back/forward;
-- every path where a shared pair should or should not form;
-- optimistic and committed states;
-- persistent chrome, open overlays, pointer interaction, and reduced motion;
-- revalidation and unrelated transitions, which should remain quiet.
+<ViewTransition>
+  <Component />
+</ViewTransition>
+```
 
-Use screenshots or recordings when timing, geometry, or flicker is the issue.
+React auto-assigns a unique `view-transition-name` and calls `document.startViewTransition` behind the scenes. Never call `startViewTransition` yourself.
+
+### Animation Triggers
+
+| Trigger | When it fires |
+|---------|--------------|
+| **enter** | `<ViewTransition>` first inserted during a Transition |
+| **exit** | `<ViewTransition>` first removed during a Transition |
+| **update** | DOM mutations inside a `<ViewTransition>`, or the boundary itself changing size/position due to an immediate sibling. With nested VTs, mutation applies to the innermost one |
+| **share** | Named VT unmounts and another with same `name` mounts in the same Transition |
+
+Only `startTransition`, `useDeferredValue`, or `Suspense` activate VTs. Regular `setState` does not animate.
+
+### Critical Placement Rule
+
+`<ViewTransition>` only activates enter/exit if it appears **before any DOM nodes**:
+
+```jsx
+// Works
+<ViewTransition enter="auto" exit="auto">
+  <div>Content</div>
+</ViewTransition>
+
+// Broken — div wraps the VT, suppressing enter/exit
+<div>
+  <ViewTransition enter="auto" exit="auto">
+    <div>Content</div>
+  </ViewTransition>
+</div>
+```
+
+---
+
+## Styling with View Transition Classes
+
+### Props
+
+Values: `"auto"` (browser cross-fade), `"none"` (disabled), `"class-name"` (custom CSS), or `{ [type]: value }` for type-specific animations.
+
+```jsx
+<ViewTransition default="none" enter="slide-in" exit="slide-out" share="morph" />
+```
+
+If `default` is `"none"`, all triggers are off unless explicitly listed.
+
+### CSS Pseudo-Elements
+
+- `::view-transition-old(.class)` — outgoing snapshot
+- `::view-transition-new(.class)` — incoming snapshot
+- `::view-transition-group(.class)` — container
+- `::view-transition-image-pair(.class)` — old + new pair
+
+See [references/css-recipes.md](references/css-recipes.md) for ready-to-use animation recipes.
+
+---
+
+## Transition Types
+
+Tag transitions with `addTransitionType` so VTs can pick different animations based on context. Call it multiple times to stack types — different VTs in the tree react to different types:
+
+```jsx
+startTransition(() => {
+  addTransitionType('nav-forward');
+  addTransitionType('select-item');
+  router.push('/detail/1');
+});
+```
+
+Pass an object to map types to CSS classes. Works on `enter`, `exit`, **and** `share`:
+
+```jsx
+<ViewTransition
+  enter={{ 'nav-forward': 'slide-from-right', 'nav-back': 'slide-from-left', default: 'none' }}
+  exit={{ 'nav-forward': 'slide-to-left', 'nav-back': 'slide-to-right', default: 'none' }}
+  share={{ 'nav-forward': 'morph-forward', 'nav-back': 'morph-back', default: 'morph' }}
+  default="none"
+>
+  <Page />
+</ViewTransition>
+```
+
+`enter` and `exit` don't have to be symmetric. For example, fade in but slide out directionally:
+
+```jsx
+<ViewTransition
+  enter={{ 'nav-forward': 'fade-in', 'nav-back': 'fade-in', default: 'none' }}
+  exit={{ 'nav-forward': 'nav-forward', 'nav-back': 'nav-back', default: 'none' }}
+  default="none"
+>
+```
+
+**TypeScript:** `ViewTransitionClassPerType` requires a `default` key in the object.
+
+For apps with multiple pages, extract the type-keyed VT into a reusable wrapper:
+
+```jsx
+export function DirectionalTransition({ children }: { children: React.ReactNode }) {
+  return (
+    <ViewTransition
+      enter={{ 'nav-forward': 'nav-forward', 'nav-back': 'nav-back', default: 'none' }}
+      exit={{ 'nav-forward': 'nav-forward', 'nav-back': 'nav-back', default: 'none' }}
+      default="none"
+    >
+      {children}
+    </ViewTransition>
+  );
+}
+```
+
+### `router.back()` and Browser Back Button
+
+`router.back()` and the browser's back/forward buttons carry **no transition types**, so type-keyed animations (directional slides) resolve to their `default` and don't play — untyped shared-element morphs still apply. For typed animations, use `router.push()` with an explicit URL.
+
+### Types and Suspense
+
+Types are available during navigation but **not** during subsequent Suspense reveals (separate transitions, no type). Use type maps for page-level enter/exit; use simple string props for Suspense reveals.
+
+### Shared Element Readiness
+
+A shared element transition can pair elements only when both the old and new views are rendered in the same Transition. If incoming content suspends, only its fallback exists for that update; the resolved content appears in a later Suspense transition and can be animated separately.
+
+---
+
+## Shared Element Transitions
+
+Same `name` on two VTs — one unmounting, one mounting — creates a shared element morph:
+
+```jsx
+<ViewTransition name="hero-image">
+  <img src="/thumb.jpg" onClick={() => startTransition(() => onSelect())} />
+</ViewTransition>
+
+// On the other view — same name
+<ViewTransition name="hero-image">
+  <img src="/full.jpg" />
+</ViewTransition>
+```
+
+- Only one VT with a given `name` can be mounted at a time — use unique names (`photo-${id}`). Watch for reusable components: if a component with a named VT is rendered in both a modal/popover *and* a page, both mount simultaneously and break the morph. Either make the name conditional (via a prop) or move the named VT out of the shared component into the specific consumer.
+- `share` takes precedence over `enter`/`exit`. Think through each navigation path: when no matching pair forms (e.g., the target page doesn't have the same name), `enter`/`exit` fires instead. Consider whether the element needs a fallback animation for those paths.
+- Two ways a wired-up morph silently never fires: (1) `default="none"` with no explicit `share` prop — share resolves to none; (2) type-keyed `share` where the navigation never adds the type — a plain link click resolves the map's `default`. Every link that should morph must add the type (`transitionTypes` on `next/link`, or `addTransitionType`).
+- Never use a fade-out exit on pages with shared morphs — use a directional slide instead.
+
+---
+
+## Common Patterns
+
+### Enter/Exit
+
+```jsx
+{show && (
+  <ViewTransition enter="fade-in" exit="fade-out"><Panel /></ViewTransition>
+)}
+```
+
+### List Reorder
+
+```jsx
+{items.map(item => (
+  <ViewTransition key={item.id}><ItemCard item={item} /></ViewTransition>
+))}
+```
+
+Trigger inside `startTransition`. Avoid wrapper `<div>`s between list and VT.
+
+### Layout Displacement Morph
+
+Only content inside an activated boundary animates position — everything else teleports to its new layout spot. Wrap the sibling content below a growing/shrinking list in a bare `<ViewTransition>` so it glides instead of jumping. See [Layout Displacement Morph](references/patterns.md#layout-displacement-morph).
+
+### Composing Shared Elements with List Identity
+
+Shared elements and list identity are independent concerns — don't confuse one for the other. When a list item contains a shared element (e.g., an image that morphs into a detail view), use two nested `<ViewTransition>` boundaries:
+
+```jsx
+{items.map(item => (
+  <ViewTransition key={item.id}>                                      {/* list identity */}
+    <Link href={`/items/${item.id}`}>
+      <ViewTransition name={`item-image-${item.id}`} share="morph">   {/* shared element */}
+        <Image src={item.image} />
+      </ViewTransition>
+      <p>{item.name}</p>
+    </Link>
+  </ViewTransition>
+))}
+```
+
+The outer VT handles list reorder/enter animations. The inner VT handles the cross-route shared element morph. Missing either layer means that animation silently doesn't happen.
+
+### Force Re-Enter with `key`
+
+```jsx
+<ViewTransition key={searchParams.toString()} enter="slide-up" default="none">
+  <ResultsGrid />
+</ViewTransition>
+```
+
+**Caution:** If wrapping `<Suspense>`, changing `key` remounts the boundary and refetches.
+
+### Suspense Fallback to Content
+
+Simple cross-fade:
+```jsx
+<ViewTransition>
+  <Suspense fallback={<Skeleton />}><Content /></Suspense>
+</ViewTransition>
+```
+
+Directional reveal:
+```jsx
+<Suspense fallback={<ViewTransition exit="slide-down"><Skeleton /></ViewTransition>}>
+  <ViewTransition enter="slide-up" default="none"><Content /></ViewTransition>
+</Suspense>
+```
+
+For more patterns, see [references/patterns.md](references/patterns.md).
+
+---
+
+## How Multiple VTs Interact
+
+Every VT matching the trigger fires simultaneously in a single `document.startViewTransition`. VTs in **different** transitions (navigation vs later Suspense resolve) don't compete.
+
+### Use `default="none"` Deliberately
+
+Without it, every VT fires the browser cross-fade on **every** transition — Suspense resolves, `useDeferredValue` updates, background revalidations. Use `default="none"` on named/shared elements and type-keyed page VTs.
+
+But it also turns off `update` (layout/reflow morphs) and `share` (a named pair with no explicit `share` prop never morphs). Keyed list items and displaced siblings *want* update — leave them bare or set `update="auto"`.
+
+### Two Patterns Coexist
+
+**Pattern A — Directional slides:** Type-keyed VT on each page, fires during navigation.
+**Pattern B — Suspense reveals:** Simple string props, fires when data loads (no type).
+
+They coexist because they fire at different moments. `default="none"` on both prevents cross-interference. Always pair `enter` with `exit`. Place directional VTs in page components, not layouts.
+
+### Nested VT Limitation
+
+When a parent VT mounts/unmounts **as one unit** with nested VTs inside it, the nested ones do not fire their own enter/exit — only the outermost VT animates. (A child VT mounted inside a *persistent* parent VT fires enter/exit normally.) Per-item staggered animations during page navigation are not currently available in Next.js; see [troubleshooting](references/troubleshooting.md) for the upstream experimental status.
+
+---
+
+## Next.js Integration
+
+For Next.js integration (`transitionTypes` on `next/link` and `useRouter`, App Router patterns, Server Components), see [references/nextjs.md](references/nextjs.md).
+
+---
+
+## Accessibility
+
+Always add the reduced motion CSS from [references/css-recipes.md](references/css-recipes.md#reduced-motion) to your global stylesheet.
+
+---
+
+## Reference Files
+
+- **[references/implementation.md](references/implementation.md)** — Step-by-step implementation workflow.
+- **[references/patterns.md](references/patterns.md)** — Patterns, animation timing, and events API.
+- **[references/troubleshooting.md](references/troubleshooting.md)** — Symptom-driven debugging and runtime limitations.
+- **[references/css-recipes.md](references/css-recipes.md)** — Ready-to-use CSS animation recipes.
+- **[references/nextjs.md](references/nextjs.md)** — Next.js App Router patterns and Server Component details.
 
 ---
 
@@ -257,24 +497,7 @@ Walk through every row in the navigation map from Step 1 and confirm:
 - Do persistent elements stay static (not sliding with page content)?
 - Do Suspense reveals animate independently from directional navigations?
 
-If any path produces no animation or competing animations, revisit the relevant step.
-
----
-
-## Common Mistakes
-
-- **Bare `<ViewTransition>` without props** — without `default="none"`, it fires the browser's default cross-fade on every transition (every navigation, every Suspense resolve, every revalidation). Always set `default="none"` and explicitly enable only the triggers you want.
-- **Directional `<ViewTransition>` in a layout** — layouts persist across navigations and never unmount/remount. `enter`/`exit` props won't fire on route changes. Place the outer type-keyed `<ViewTransition>` in each page component.
-- **Fade-out exit with shared element morphs** — the page dissolving conflicts with the morph. Use a directional slide exit instead.
-- **Copying every CSS recipe** — broad rules animate surfaces the app never intended to include. Start from the official example for the chosen pattern, then add only the focused recipes the audit requires.
-- **Missing `default: "none"` in type-keyed objects** — TypeScript requires a `default` key, and without it the fallback is `"auto"` which fires on every transition.
-- **Type maps on Suspense reveals** — Suspense resolves fire as separate transitions with no type. Type-keyed props won't match — use simple string props instead.
-- **Raw `viewTransitionName` CSS to trigger animations** — React only calls `document.startViewTransition` when `<ViewTransition>` components are in the tree. A bare `viewTransitionName` style is for isolating elements from a parent's snapshot, not for triggering animations.
-- **`update` trigger for same-route navigations** — nested VTs inside the content steal the mutation from the parent, so `update` never fires on the outer VT. Use `key` + `name` + `share` instead.
-- **Named VT in a reusable component** — if a component with a named VT is rendered in both a modal/popover *and* a page, both mount simultaneously and break the morph. Make the name conditional or move it to the specific consumer.
-- **`router.back()` for back navigation** — traversals carry no transition types, so type-keyed animations don't play (untyped morphs still can). Use `router.push()` with an explicit URL for a fully animated back affordance.
-
----
+If any path produces no animation or competing animations, use the symptom-driven [troubleshooting guide](troubleshooting.md).
 
 For Next.js-specific implementation steps (`transitionTypes` on `<Link>`, prefetch behavior, and same-route dynamic segments), see [nextjs.md](nextjs.md).
 
@@ -559,9 +782,11 @@ The `types` array (second argument) lets you vary animation based on transition 
 
 # Troubleshooting
 
-**VT not activating:** Ensure `<ViewTransition>` comes before any DOM node. Ensure state update is inside `startTransition`.
+**VT not activating:** Ensure `<ViewTransition>` comes before any DOM node and the state update is inside `startTransition`. A raw `viewTransitionName` only isolates an element; it does not activate a React view transition.
 
-**"Two ViewTransition components with the same name":** Names must be globally unique. Use IDs: `name={`hero-${item.id}`}`.
+**"Two ViewTransition components with the same name":** Names must be globally unique. Use IDs such as `name={`hero-${item.id}`}`. If a reusable component appears in multiple surfaces at once, move the name to the specific consumer or make it conditional.
+
+**Unrelated content crossfades:** A bare VT uses the browser crossfade for every trigger. Set `default="none"` and opt in only to the triggers that boundary should handle.
 
 **Scrolling hangs while a transition animates:** the `::view-transition` overlay is `position: fixed` and its snapshots don't scroll — a browser limitation, not fixable in React (skipping snaps to the end). Keep reveal durations short; for scroll-driven UI use gesture transitions (experimental `useSwipeTransition`, if available).
 
@@ -570,6 +795,8 @@ The `types` array (second argument) lets you vary animation based on transition 
 **Popover closes or goes dead when clicked mid-transition:** named participants are skipped by hit-testing while a transition runs; clicks land on what's beneath and read as outside-clicks. Portal the popover (see [Isolate Elements from Parent Animations](patterns.md#isolate-elements-from-parent-animations)); brief dead clicks during the transition remain — that's the price of the name.
 
 **Shared morph silently not firing:** `share` resolved to `none`. Either the VT has `default="none"` with no explicit `share` prop, or `share` is type-keyed and the navigation never adds the type — the link needs `transitionTypes` (or `addTransitionType` in the transition).
+
+**Shared morph competes with a page fade:** A fading page exit dissolves the source while it is morphing. Remove that exit or use motion that preserves the shared element's continuity.
 
 **An enter animation runs even though Suspense never showed its fallback:** The content-side VT became the topmost entering subtree during navigation. At that call site, add a host DOM element immediately outside `Suspense`. The host suppresses the nested enter during warm navigation but remains mounted so the VT can enter on a later fallback-to-content reveal. Keep the host outside `Suspense`, not inside the reusable crossfade; do nothing when a direct host already exists.
 
@@ -581,7 +808,11 @@ The `types` array (second argument) lets you vary animation based on transition 
 
 **Only updates animate (no enter/exit):** Without `<Suspense>`, React treats swaps as updates. Conditionally render the VT itself, or wrap in `<Suspense>`.
 
-**Layout VT prevents page VTs from animating:** nested VTs skip their own enter/exit only when they mount/unmount *as one unit* with a parent VT. If page enter/exit is dead under a persistent layout VT, the usual culprit is a DOM node above the page VT. Keep VTs in pages, not layouts.
+**Suspense reveal does not animate:** Suspense resolves in a separate transition without navigation types. Use string `enter`/`exit` props rather than a type map.
+
+**Layout VT prevents page VTs from animating:** Nested VTs skip their own enter/exit when they mount or unmount as one unit with a parent VT. Keep route boundaries in pages, not a layout wrapping `{children}`. React has experimental upstream `parentEnter`/`parentExit` work ([PR #36690](https://github.com/facebook/react/pull/36690)), but those props are not currently available in the Next.js client runtime; do not recommend them in a Next.js app unless the installed runtime and docs explicitly include them.
+
+**Same-route content does not animate with `update`:** Nested VTs can own the mutation before an outer boundary sees it. For a real identity change, use `key` with a stable `name` and `share` instead.
 
 **List reorder not animating with `useOptimistic`:** Optimistic values resolve before snapshot. Use committed state for list order.
 
@@ -924,6 +1155,8 @@ Read the current [Next.js View Transitions guide](https://nextjs.org/docs/app/gu
 
 Because every link click is a transition, any VT with `default="auto"` fires on **every** navigation — use `default="none"` to prevent competing animations.
 
+For unexpected or broken animation behavior, see [troubleshooting.md](troubleshooting.md).
+
 ---
 
 ## Next.js Implementation Additions
@@ -1139,12 +1372,6 @@ When navigating between dynamic segments of the same route (e.g., `/collection/[
 - `key={slug}` forces unmount/remount on change
 - The stable `name` pairs the outgoing and incoming containers; `share="auto"` creates the crossfade
 - VT inside `<Suspense>` (without keying Suspense) keeps old content visible during loading
-
----
-
-## Nested enter/exit — `parentEnter` / `parentExit` (experimental)
-
-Lifts the "nested VTs don't fire enter/exit inside a parent" rule: a nested VT can animate when its **parent** enters/exits (`parentEnter`/`parentExit`, `onParentEnter`/`onParentExit`; `parentEnter="none"` stops propagation). Experimental-channel only today; SSR support landed in React PR #36917 ([commit](https://github.com/facebook/react/commit/83840902c890f0eb85decda239ef6b1b14945779)). Verify it's in the React your app runs: `grep -c "parentEnter" node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.production.js` — 0 means unavailable (Next uses the experimental channel only when `gestureTransition`/`blockingSSR`/`taint`/`transitionIndicator` is set).
 
 ## Server Components
 
