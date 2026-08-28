@@ -35,7 +35,8 @@ For a whole-app rollout, follow [references/implementation.md](references/implem
 
 | Need | Reference |
 |---|---|
-| Production patterns and debugging | [references/patterns.md](references/patterns.md) |
+| Production patterns | [references/patterns.md](references/patterns.md) |
+| Unexpected or broken animation behavior | [references/troubleshooting.md](references/troubleshooting.md) |
 | Next.js routing and prefetch behavior | [references/nextjs.md](references/nextjs.md) |
 | Reusable CSS | [references/css-recipes.md](references/css-recipes.md) |
 
@@ -123,7 +124,7 @@ For each shared element (`name` prop), note every navigation where a pair forms 
 
 ## Step 2: Add CSS Recipes
 
-Start with the CSS from the official guide for its examples, then copy only the applicable sections from [css-recipes.md](css-recipes.md). Always include reduced motion. Add live-root, persistent-element, backdrop, or floating-element rules only when the audit found those surfaces.
+Use the official guide's examples to decide what should animate. Then copy only the applicable sections from [css-recipes.md](css-recipes.md), which contains the complete recipe set for this skill. Always include reduced motion. Add live-root, persistent-element, backdrop, or floating-element rules only when the audit found those surfaces.
 
 Customize timing after the structure works. Keep ordinary crossfades opacity-only; scope blur to a specific shared morph when it is intentional.
 
@@ -571,7 +572,7 @@ The `types` array (second argument) lets you vary animation based on transition 
 
 ---
 
-## Troubleshooting
+# Troubleshooting
 
 **VT not activating:** Ensure `<ViewTransition>` comes before any DOM node. Ensure state update is inside `startTransition`.
 
@@ -579,15 +580,15 @@ The `types` array (second argument) lets you vary animation based on transition 
 
 **Scrolling hangs while a transition animates:** the `::view-transition` overlay is `position: fixed` and its snapshots don't scroll — a browser limitation, not fixable in React (skipping snaps to the end). Keep reveal durations short; for scroll-driven UI use gesture transitions (experimental `useSwipeTransition`, if available).
 
-**Open popover flickers when a background transition settles:** it's captured in `root`. Give it a real `view-transition-name` + isolation (not `none`) — see [Isolate Elements from Parent Animations](#isolate-elements-from-parent-animations).
+**Open popover flickers when a background transition settles:** it's captured in `root`. Give it a real `view-transition-name` + isolation (not `none`) — see [Isolate Elements from Parent Animations](patterns.md#isolate-elements-from-parent-animations).
 
-**Popover closes or goes dead when clicked mid-transition:** named participants are skipped by hit-testing while a transition runs; clicks land on what's beneath and read as outside-clicks. Portal the popover (see [Isolate Elements from Parent Animations](#isolate-elements-from-parent-animations)); brief dead clicks during the transition remain — that's the price of the name.
+**Popover closes or goes dead when clicked mid-transition:** named participants are skipped by hit-testing while a transition runs; clicks land on what's beneath and read as outside-clicks. Portal the popover (see [Isolate Elements from Parent Animations](patterns.md#isolate-elements-from-parent-animations)); brief dead clicks during the transition remain — that's the price of the name.
 
 **Shared morph silently not firing:** `share` resolved to `none`. Either the VT has `default="none"` with no explicit `share` prop, or `share` is type-keyed and the navigation never adds the type — the link needs `transitionTypes` (or `addTransitionType` in the transition).
 
 **An enter animation runs even though Suspense never showed its fallback:** The content-side VT became the topmost entering subtree during navigation. At that call site, add a host DOM element immediately outside `Suspense`. The host suppresses the nested enter during warm navigation but remains mounted so the VT can enter on a later fallback-to-content reveal. Keep the host outside `Suspense`, not inside the reusable crossfade; do nothing when a direct host already exists.
 
-**Section below a list teleports instead of gliding:** it's outside any activated boundary, its VT has `default="none"` (which disables `update`), or it isn't an immediate sibling of the changing content. See [Layout Displacement Morph](#layout-displacement-morph).
+**Section below a list teleports instead of gliding:** it's outside any activated boundary, its VT has `default="none"` (which disables `update`), or it isn't an immediate sibling of the changing content. See [Layout Displacement Morph](patterns.md#layout-displacement-morph).
 
 **`router.back()` and browser back/forward skip the directional slide:** traversals carry no transition types, so type-keyed maps resolve to `default` — untyped shared-element morphs still apply. Use `router.push()` for typed animations.
 
@@ -617,7 +618,7 @@ The `types` array (second argument) lets you vary animation based on transition 
 
 Ready-to-use CSS for `<ViewTransition>` props. Copy into your global stylesheet.
 
-The [Next.js View Transitions demo CSS](https://github.com/vercel-labs/react-view-transitions-demo/blob/main/src/app/globals.css) is the canonical companion to the official guide. These recipes add focused variants and app-shell isolation patterns; copy only what the app uses.
+This file contains the complete CSS recipe set for the patterns in this skill. Copy only what the app needs. Use the [official Next.js guide](https://nextjs.org/docs/app/guides/view-transitions) and its [demo](https://github.com/vercel-labs/react-view-transitions-demo) as references for deciding what should animate, not as an additional CSS baseline.
 
 ---
 

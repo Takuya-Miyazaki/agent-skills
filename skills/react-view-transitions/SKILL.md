@@ -34,7 +34,8 @@ For a whole-app rollout, follow [references/implementation.md](references/implem
 
 | Need | Reference |
 |---|---|
-| Production patterns and debugging | [references/patterns.md](references/patterns.md) |
+| Production patterns | [references/patterns.md](references/patterns.md) |
+| Unexpected or broken animation behavior | [references/troubleshooting.md](references/troubleshooting.md) |
 | Next.js routing and prefetch behavior | [references/nextjs.md](references/nextjs.md) |
 | Reusable CSS | [references/css-recipes.md](references/css-recipes.md) |
 
