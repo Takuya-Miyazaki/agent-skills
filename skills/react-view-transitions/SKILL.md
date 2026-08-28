@@ -1,6 +1,6 @@
 ---
 name: vercel-react-view-transitions
-description: Guide for implementing smooth, native-feeling animations using React's View Transition API (`<ViewTransition>` component, `addTransitionType`, and CSS view transition pseudo-elements). Use this skill whenever the user wants to add page transitions, animate route changes, create shared element animations, animate enter/exit of components, animate list reorder, implement directional (forward/back) navigation animations, or integrate view transitions in Next.js. Also use when the user mentions view transitions, `startViewTransition`, `ViewTransition`, transition types, or asks about animating between UI states in React without third-party animation libraries.
+description: Guide for implementing smooth, native-feeling animations using React's ViewTransition component, addTransitionType, and CSS view transition pseudo-elements. Use this skill whenever the user wants to add page transitions, animate route changes, create shared element animations, animate enter/exit of components, animate list reorder, implement directional (forward/back) navigation animations, or integrate view transitions in Next.js. Also use when the user mentions view transitions, startViewTransition, ViewTransition, transition types, or asks about animating between UI states in React without third-party animation libraries.
 license: MIT
 metadata:
   author: vercel
@@ -272,6 +272,24 @@ Simple cross-fade:
   <Suspense fallback={<Skeleton />}><Content /></Suspense>
 </ViewTransition>
 ```
+
+For a reveal-only cross-fade inside navigable content, add a dedicated DOM host immediately outside `Suspense` at the usage site. Keep the shared `Crossfade` component wrapper-free:
+
+```jsx
+function Crossfade({ children }) {
+  return <ViewTransition enter="auto" default="none">{children}</ViewTransition>;
+}
+
+<div>
+  <Suspense fallback={<Skeleton />}>
+    <Crossfade><Content /></Crossfade>
+  </Suspense>
+</div>
+```
+
+The host `<div>` is the topmost insertion during navigation, so cached content appears immediately. If the boundary suspends, the host mounts with the fallback and persists; `Crossfade` becomes the topmost insertion only when the content later resolves. Do not put the host inside `Crossfade`: it would mount together with the VT and suppress the intended reveal. Audit call sites first—usages that already have a direct outer DOM host need no change. Do not rely on an unrelated broad ancestor that React may preserve or reconcile in place.
+
+Pairing matching View Transitions around the fallback and content with `share="auto"` is another option, but it creates a shared-element morph. Use it only when that geometry interpolation is intended and verified; it is not required for a reveal cross-fade.
 
 Directional reveal:
 ```jsx

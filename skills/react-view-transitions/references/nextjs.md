@@ -173,6 +173,20 @@ Directional slides + Suspense reveals coexist because they fire at different mom
 </ViewTransition>
 ```
 
+For a reveal-only fade without a directional page transition, add a dedicated host element immediately outside the Suspense boundary at the usage site:
+
+```tsx
+<div>
+  <Suspense fallback={<Skeleton />}>
+    <ViewTransition enter="auto" default="none">
+      <Content />
+    </ViewTransition>
+  </Suspense>
+</div>
+```
+
+This distinction matters with prefetched routes. If `Content` is already ready, the host is the topmost entering subtree and the nested fade does not run. If it suspends, the host mounts with the fallback and remains in place; the nested VT enters only when the content resolves. Keep the host outside `Suspense`; putting it inside a reusable `Crossfade` would suppress the reveal. Audit call sites before changing anything: an existing direct host already provides the guard, while a layout or broad ancestor may persist across navigation and does not guarantee it.
+
 ---
 
 ## `loading.tsx` as Suspense Boundary

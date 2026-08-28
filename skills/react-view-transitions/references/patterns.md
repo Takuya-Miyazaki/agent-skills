@@ -287,6 +287,8 @@ The `types` array (second argument) lets you vary animation based on transition 
 
 **Shared morph silently not firing:** `share` resolved to `none`. Either the VT has `default="none"` with no explicit `share` prop, or `share` is type-keyed and the navigation never adds the type — the link needs `transitionTypes` (or `addTransitionType` in the transition).
 
+**Prefetched content flashes even though Suspense never showed its fallback:** A content-side VT with `enter` became the topmost entering subtree during navigation. At the affected call site, wrap `Suspense` in a dedicated host DOM element. On navigation the host is inserted and suppresses the nested enter; on a real suspension the mounted host stays put and the nested VT enters when content resolves. Keep the host outside `Suspense`, not inside the shared cross-fade component. Existing call sites with a direct host need no change; a broad ancestor that persists or is reconciled in place is not a reliable guard.
+
 **Section below a list teleports instead of gliding:** it's outside any activated boundary, its VT has `default="none"` (which disables `update`), or it isn't an immediate sibling of the changing content. See [Layout Displacement Morph](#layout-displacement-morph).
 
 **`router.back()` and browser back/forward skip the directional slide:** traversals carry no transition types, so type-keyed maps resolve to `default` — untyped shared-element morphs still apply. Use `router.push()` for typed animations.
