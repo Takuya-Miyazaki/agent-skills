@@ -1,43 +1,20 @@
 # React View Transitions Skill
 
-An agent skill for implementing smooth, native-feeling animations using React's View Transition API.
+Practical guidance for React and Next.js View Transitions. The package points agents to current official documentation, then adds production patterns distilled from real applications.
 
-## What This Skill Covers
+## Files
 
-- **`<ViewTransition>` component** — animation triggers (enter, exit, update, share), placement rules, View Transition Classes
-- **`addTransitionType`** — tagging transitions for directional or context-specific animations
-- **Shared element transitions** — morphing elements across different views
-- **View Transition Events** — imperative JavaScript animations via the Web Animations API
-- **CSS pseudo-elements** — `::view-transition-old`, `::view-transition-new`, `::view-transition-group`
-- **Next.js integration** — `experimental.viewTransition`, `transitionTypes` on `next/link` and `useRouter`, App Router patterns
-- **Accessibility** — `prefers-reduced-motion` handling
-- **Ready-to-use CSS recipes** — fade, slide, scale, directional navigation
+- [`SKILL.md`](SKILL.md) — entrypoint, workflow, and high-value rules
+- [`AGENTS.md`](AGENTS.md) — short standalone summary
+- [`references/implementation.md`](references/implementation.md) — whole-app audit and rollout
+- [`references/patterns.md`](references/patterns.md) — production patterns and debugging
+- [`references/nextjs.md`](references/nextjs.md) — Next.js routing, prefetch, and Suspense behavior
+- [`references/css-recipes.md`](references/css-recipes.md) — app-specific CSS refinements
 
-## Skill Structure
-
-```
-react-view-transitions/
-├── SKILL.md                      # Core skill (always loaded)
-├── AGENTS.md                     # Full compiled document (all references expanded)
-└── references/
-    ├── implementation.md         # Step-by-step implementation workflow
-    ├── patterns.md               # Real-world patterns, events API, troubleshooting
-    ├── nextjs.md                 # Next.js-specific patterns
-    └── css-recipes.md            # Copy-paste CSS animations
-```
-
-## Installation
-
-Install via [skills.sh](https://skills.sh):
+## Install
 
 ```bash
-npx skills add https://github.com/vercel-labs/agent-skills --skill vercel-react-view-transitions
+npx skills add vercel-labs/agent-skills --skill vercel-react-view-transitions
 ```
 
-## Resources
-
-- [React `<ViewTransition>` docs](https://react.dev/reference/react/ViewTransition)
-- [React `addTransitionType` docs](https://react.dev/reference/react/addTransitionType)
-- [Next.js View Transitions guide](https://nextjs.org/docs/app/guides/view-transitions)
-- [Next.js `viewTransition` config](https://nextjs.org/docs/app/api-reference/config/next-config-js/viewTransition)
-- [Next.js App Router Playground (view transitions)](https://github.com/vercel/next-app-router-playground/tree/main/app/view-transitions) — Vercel's reference implementation
+React's View Transition APIs evolve quickly. Follow the official links in `SKILL.md` and check the documentation shipped with the installed Next.js version before implementing.

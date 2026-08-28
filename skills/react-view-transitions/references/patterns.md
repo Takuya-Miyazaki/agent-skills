@@ -1,314 +1,175 @@
-# Patterns and Guidelines
+# Production Patterns
 
-## Searchable Grid with `useDeferredValue`
+This catalog contains patterns found while building and debugging real React and Next.js applications. It supplements rather than replaces the official React documentation linked from [`SKILL.md`](../SKILL.md).
 
-`useDeferredValue` makes filter updates a transition, activating `<ViewTransition>`:
+## Warm Navigation Versus Cold Reveal
+
+An enter-only VT inside Suspense can behave differently depending on whether navigation data was prefetched.
+
+Keep the reusable component wrapper-free:
 
 ```tsx
-'use client';
-
-import { useDeferredValue, useState, ViewTransition, Suspense } from 'react';
-
-export default function SearchableGrid({ itemsPromise }) {
-  const [search, setSearch] = useState('');
-  const deferredSearch = useDeferredValue(search);
-
+export function Crossfade({ children }: { children: React.ReactNode }) {
   return (
-    <>
-      <input value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
-      <ViewTransition>
-        <Suspense fallback={<GridSkeleton />}>
-          <ItemGrid itemsPromise={itemsPromise} search={deferredSearch} />
-        </Suspense>
-      </ViewTransition>
-    </>
-  );
-}
-```
-
-Per-item `<ViewTransition name={...}>` inside a deferred list triggers cross-fades on every keystroke. Fix with `default="none"`:
-
-```tsx
-{filteredItems.map(item => (
-  <ViewTransition key={item.id} name={`item-${item.id}`} share="morph" default="none">
-    <ItemCard item={item} />
-  </ViewTransition>
-))}
-```
-
-## Card Expand/Collapse with `startTransition`
-
-Toggle between grid and detail view with shared element morph:
-
-```tsx
-'use client';
-
-import { useState, useRef, startTransition, ViewTransition } from 'react';
-
-export default function ItemGrid({ items }) {
-  const [expandedId, setExpandedId] = useState(null);
-  const scrollRef = useRef(0);
-
-  return expandedId ? (
-    <ViewTransition enter="slide-in" name={`item-${expandedId}`}>
-      <ItemDetail
-        item={items.find(i => i.id === expandedId)}
-        onClose={() => {
-          startTransition(() => {
-            setExpandedId(null);
-            setTimeout(() => window.scrollTo({ behavior: 'smooth', top: scrollRef.current }), 100);
-          });
-        }}
-      />
-    </ViewTransition>
-  ) : (
-    <div className="grid grid-cols-3 gap-4">
-      {items.map(item => (
-        <ViewTransition key={item.id} name={`item-${item.id}`}>
-          <ItemCard
-            item={item}
-            onSelect={() => {
-              scrollRef.current = window.scrollY;
-              startTransition(() => setExpandedId(item.id));
-            }}
-          />
-        </ViewTransition>
-      ))}
-    </div>
-  );
-}
-```
-
-## Type-Safe Transition Helpers
-
-Use `as const` arrays and derived types to prevent ID clashes:
-
-```tsx
-const transitionTypes = ['default', 'transition-to-detail', 'transition-to-list'] as const;
-const animationTypes = ['auto', 'none', 'animate-slide-from-left', 'animate-slide-from-right'] as const;
-
-type TransitionType = (typeof transitionTypes)[number];
-type AnimationType = (typeof animationTypes)[number];
-type TransitionMap = { default: AnimationType } & Partial<Record<Exclude<TransitionType, 'default'>, AnimationType>>;
-
-export function HorizontalTransition({ children, enter, exit }: {
-  children: React.ReactNode;
-  enter: TransitionMap;
-  exit: TransitionMap;
-}) {
-  return <ViewTransition enter={enter} exit={exit}>{children}</ViewTransition>;
-}
-```
-
-## Cross-Fade Without Remount
-
-Omit `key` to trigger an update (cross-fade) instead of exit + enter. Avoids Suspense remount/refetch:
-
-```jsx
-<ViewTransition>
-  <TabPanel tab={activeTab} />
-</ViewTransition>
-```
-
-Use `key` when content identity changes (state resets). Omit for cross-fades (tabs, panels, carousel).
-
-## Isolate Elements from Parent Animations
-
-Pull an element out of the animated `root` snapshot by giving it its own `view-transition-name`. **`view-transition-name: none` is a no-op** — it's the CSS default, so the element stays in `root` (a common flicker bug). Use a real, unique name, then neutralize with `<ViewTransition default="none">` (no CSS) or CSS (needed for `z-index`/`display` control — see [css-recipes.md](css-recipes.md#persistent-element-isolation)).
-
-- **Persistent chrome** (nav, sidebar, player bar): `<nav style={{ viewTransitionName: 'persistent-nav' }}>` + isolation CSS. `<ViewTransition default="none">` works too, but its auto-name can't take `z-index`/backdrop `display:none` — hand-name when you need those.
-- **Floating elements** (popovers, menus): left open, they're captured in `root` and flicker on settle. Real name + isolation ([Floating Element Isolation](css-recipes.md#floating-element-isolation-popovers-menus-tooltips-control-clusters)). A static name is fine if only one is mounted (`unmountOnHide`); native top-layer (`popover`/`<dialog>`) settle-flicker is a browser limit.
-- **Naming an interactive element has a cost:** named participants are skipped by hit-testing while a transition runs ([csswg#10930](https://github.com/w3c/csswg-drafts/issues/10930)) — clicks and hover fall through to whatever is beneath. Portal named popovers/menus; rendered inline in a clickable row, mid-transition clicks activate the row and read as outside-clicks that close the popover.
-- **Third-party floating components** (toast libraries, portals you don't render): put the name on an always-mounted wrapper you own — `<div style={{ viewTransitionName: 'toaster' }} className="pointer-events-none fixed inset-0">`. Library containers often unmount when empty, so naming them directly leaves the group unpinned exactly when a toast appears mid-transition. Name a dialog's backdrop separately from its panel so each pins independently.
-
-## Suspense reveal flicker
-
-An element rendered in **both** the fallback and the content flickers (opacity dip) on reveal — it fades against itself. Not a morph. **Fix: render it outside the `<Suspense>` boundary** (mount once, above it), or pin it with a `view-transition-name`.
-
-```jsx
-<h1>{title}</h1>
-<Suspense fallback={<BodySkeleton />}><Body /></Suspense>
-```
-
-Don't put a manual `viewTransitionName` on the root DOM node inside `<ViewTransition>` — React's auto-name overrides it.
-
-## Sliding Indicator (tabs)
-
-One shared-name indicator rendered under the **active** tab morphs between positions on change (slide the group, disable old/new — see [Sliding Indicator](css-recipes.md#sliding-indicator-tab-underline--segmented-pill)). Render it only under the active tab so exactly one element holds `indicatorName`; use a distinct `indicatorName` per tab strip. Trigger the state change inside `startTransition` so the move animates. Whatever owns `active` drives it — local state here, routing in Next (see [Routing-Driven Tabs](nextjs.md#routing-driven-tabs)).
-
-```tsx
-import { useState, useTransition, ViewTransition } from 'react';
-
-export function Tabs({ tabs, indicatorName = 'tab-indicator' }) {
-  const [active, setActive] = useState(tabs[0].value);
-  const [, startTransition] = useTransition();
-  return (
-    <nav>
-      {tabs.map(t => (
-        <button key={t.value} type="button"
-          aria-current={active === t.value ? 'page' : undefined}
-          onClick={() => startTransition(() => setActive(t.value))}>
-          <span>{t.label}</span>
-          {active === t.value && (
-            <ViewTransition name={indicatorName} share="tab-underline">
-              <span className="active-underline" aria-hidden />
-            </ViewTransition>
-          )}
-        </button>
-      ))}
-    </nav>
-  );
-}
-```
-
-Because the state change is a transition, if the newly-active tab renders suspending content the whole update — indicator **and** `aria-current` — waits for it to commit, and the strip feels dead on click. Give the controls an immediate value with `useOptimistic` (drive `aria-current` from it) so feedback is instant while the content streams. The routing variant ([Routing-Driven Tabs](nextjs.md#routing-driven-tabs)) does exactly this: optimistic `aria-current`, committed `active` for the bar.
-
-## Layout Displacement Morph
-
-Only content inside an activated boundary animates position — everything else teleports to its new layout spot. When a list grows or shrinks, wrap the sibling content below it so it glides instead of jumping:
-
-```jsx
-<FavoritesList />              {/* rows enter/exit */}
-<ViewTransition>               {/* bare: update enabled */}
-  <section>
-    <h2>You Might Also Like</h2>
-    <Recommendations />
-  </section>
-</ViewTransition>
-```
-
-The section — heading included — morphs as one group when rows above are added or removed. Nothing inside the section changed; the *displacement* is the update.
-
-- React only measures boundaries that are direct children of nodes along the changed path — a VT buried under an extra wrapper element won't activate. Place the boundary as a direct sibling of the changing content.
-- Sometimes the better fix is no morph at all: pad fixed-size lists to a constant slot count with invisible fillers so the grid never changes height and nothing below it moves.
-- `default="none"` disables exactly this morph — it turns off `update`. Named/shared elements get `default="none"`; displaced siblings and keyed list items stay bare or set `update="auto"`.
-
-## Reusable Animated Collapse
-
-```jsx
-function AnimatedCollapse({ open, children }) {
-  if (!open) return null;
-  return (
-    <ViewTransition enter="expand-in" exit="collapse-out">
+    <ViewTransition enter="auto" default="none">
       {children}
     </ViewTransition>
   );
 }
-
-// Usage: toggle with startTransition
-<button onClick={() => startTransition(() => setOpen(o => !o))}>Toggle</button>
-<AnimatedCollapse open={open}><SectionContent /></AnimatedCollapse>
 ```
 
-## Composing with Activity
-
-`Activity` is orthogonal to view transitions: it preserves the state of a hidden subtree, `ViewTransition` animates it. Compose them for an in-page show/hide (drawer, panel, tab body) that keeps its scroll/form state while it animates in and out:
-
-```jsx
-<Activity mode={isVisible ? 'visible' : 'hidden'}>
-  <ViewTransition enter="slide-in" exit="slide-out">
-    <Sidebar />
-  </ViewTransition>
-</Activity>
-```
-
-Only reach for Activity when there's state worth preserving — a stateless element (e.g. the sliding indicator above) gains nothing from it. In Next.js, layout-hosted chrome already persists across navigations without Activity (see [nextjs.md](nextjs.md#layout-level-viewtransition)).
-
-## Exclude Elements with `useOptimistic`
-
-`useOptimistic` values update before the transition snapshot, excluding them from animation. Use for controls (labels); use committed state for animated content:
+At a navigable call site that otherwise exposes `Suspense` at its root, add a persistent DOM host outside the boundary:
 
 ```tsx
-const [sort, setSort] = useState('newest');
-const [optimisticSort, setOptimisticSort] = useOptimistic(sort);
+<div>
+  <Suspense fallback={<Skeleton />}>
+    <Crossfade>
+      <Content />
+    </Crossfade>
+  </Suspense>
+</div>
+```
 
-function cycleSort() {
-  const nextSort = getNextSort(optimisticSort);
-  startTransition(() => {
-    setOptimisticSort(nextSort);  // before snapshot — no animation
-    setSort(nextSort);            // between snapshots — animates
-  });
-}
+Why it works:
 
-<button>Sort: {LABELS[optimisticSort]}</button>
-{items.sort(comparators[sort]).map(item => (
-  <ViewTransition key={item.id}><ItemCard item={item} /></ViewTransition>
+- On a warm navigation, React inserts the host and suppresses the nested enter.
+- On a cold path, the host mounts with the fallback and persists; the nested VT enters only when content resolves.
+
+Do not put the host inside `Crossfade`; that suppresses the reveal too. Audit call sites before editing because many already have a direct DOM host. A broad ancestor that persists across navigation is not a substitute.
+
+Use a fallback/content shared pair only when an actual geometry morph is desired. It is not required for a reveal fade.
+
+## Appended Async Pages
+
+The initial page is already part of the screen. Only later pages represent new content arriving after interaction:
+
+```tsx
+{pages.map((page, index) => (
+  <Suspense key={index} fallback={<RowsSkeleton />}>
+    {index === 0 ? <Page page={page} /> : <Crossfade><Page page={page} /></Crossfade>}
+  </Suspense>
 ))}
 ```
 
----
+This avoids replaying an arrival animation for the first page after state resets, navigation, or hydration.
 
-## View Transition Events
+## Optimistic State with a Committed Shared Indicator
 
-Imperative control via `onEnter`, `onExit`, `onUpdate`, `onShare`. Return a cleanup function to cancel your animation when the transition finishes. `onShare` takes precedence over `onEnter`/`onExit`.
+Optimistic state should make the control feel immediate, but a named shared element needs a single stable source and destination. Use optimistic state for labels, colors, and pending treatment; render the named indicator from committed route state:
 
-```jsx
-<ViewTransition
-  onEnter={(instance, types) => {
-    const anim = instance.new.animate(
-      [{ transform: 'scale(0.8)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }],
-      { duration: 300, easing: 'ease-out' }
-    );
-    return () => anim.cancel();
-  }}
->
-  <Component />
+```tsx
+const [optimisticTab, setOptimisticTab] = useOptimistic(activeTab);
+
+{tabs.map(tab => {
+  const isActive = optimisticTab === tab.value;
+  const isCommitted = activeTab === tab.value;
+
+  return (
+    <Link
+      key={tab.value}
+      href={tab.href}
+      aria-current={isActive ? 'page' : undefined}
+      onNavigate={() => startTransition(() => setOptimisticTab(tab.value))}
+    >
+      {tab.label}
+      {isCommitted ? (
+        <ViewTransition name="tab-indicator" share="tab-underline">
+          <span aria-hidden />
+        </ViewTransition>
+      ) : null}
+    </Link>
+  );
+})}
+```
+
+If the indicator follows optimistic state, the old named element can disappear before the route commits, leaving no reliable shared pair.
+
+## Layout Displacement
+
+When content changes height, the section below it moves. Wrapping only the changing content does not animate the displaced section; wrap the section that moves:
+
+```tsx
+<ChangingList />
+<ViewTransition>
+  <RelatedSection />
 </ViewTransition>
 ```
 
-The `instance` object: `instance.old`, `instance.new`, `instance.group`, `instance.imagePair`, `instance.name`.
+Keep the moving boundary as a direct sibling where possible. Leave `update` enabled; `default="none"` disables it unless explicitly restored.
 
-The `types` array (second argument) lets you vary animation based on transition type.
+## Keyed Collections
 
----
+Wrap each stable item rather than the entire collection when insertions, removals, or reordering should retain identity:
 
-## Animation Timing
+```tsx
+{items.map(item => (
+  <ViewTransition key={item.id}>
+    <Row item={item} />
+  </ViewTransition>
+))}
+```
 
-| Interaction | Duration |
-|------------|----------|
-| Direct toggle (expand/collapse) | 100–200ms |
-| Route transition (slide) | 150–250ms |
-| Suspense reveal (skeleton → content) | 200–400ms |
-| Shared element morph | 300–500ms |
+React keys provide reconciliation identity. Add explicit VT names only when the item must pair with another representation elsewhere.
 
----
+## Persistent UI and Portals
+
+Fixed chrome and portaled overlays often appear in both snapshots and can double, fade, or freeze. Give affected surfaces stable names and disable their snapshot animation in CSS.
+
+For a third-party portal, name an always-mounted owner:
+
+```tsx
+<div style={{ viewTransitionName: 'toaster' }} className="fixed inset-0 pointer-events-none">
+  <ThirdPartyToaster />
+</div>
+```
+
+This is more reliable than naming a transient node created inside the library. Use different names for independent simultaneous surfaces such as a modal and its backdrop.
+
+Backdrop blur is a special case: the old and new translucent snapshots can stack and look darker. Hide the old backdrop snapshot rather than fading two blurred layers together. See [Persistent element isolation](css-recipes.md#persistent-element-isolation).
+
+## Keep the Root Live
+
+The default root crossfade snapshots the whole document. In app shells with persistent unnamed chrome, that can freeze hover states or briefly intercept interaction. Disable root animation and animate only named groups:
+
+```css
+::view-transition-old(root) {
+  display: none;
+}
+
+::view-transition-new(root) {
+  animation: none;
+}
+```
+
+Also set `pointer-events: none` on the transition overlay when live controls must remain clickable. Use this as an app-shell policy, not an automatic default for every site.
+
+## Duplicate Content Across Suspense
+
+If fallback and content both render the same heading, toolbar, or media, the two snapshots can fade against each other and produce a visible dip.
+
+Preferred order:
+
+1. Render stable content outside Suspense.
+2. If it genuinely changes identity, give the two versions a deliberate shared transition.
+3. Otherwise keep that element out of the animated group.
+
+## Same-Route Content Direction
+
+For calendar-like views where the route shell persists and only a parameter changes, use a stable name plus a keyed child so React sees replacement, then choose `share` from the navigation type. See [Same-route dynamic segments](nextjs.md#same-route-dynamic-segments).
 
 ## Troubleshooting
 
-**VT not activating:** Ensure `<ViewTransition>` comes before any DOM node. Ensure state update is inside `startTransition`.
-
-**"Two ViewTransition components with the same name":** Names must be globally unique. Use IDs: `name={`hero-${item.id}`}`.
-
-**Scrolling hangs while a transition animates:** the `::view-transition` overlay is `position: fixed` and its snapshots don't scroll — a browser limitation, not fixable in React (skipping snaps to the end). Keep reveal durations short; for scroll-driven UI use gesture transitions (experimental `useSwipeTransition`, if available).
-
-**Open popover flickers when a background transition settles:** it's captured in `root`. Give it a real `view-transition-name` + isolation (not `none`) — see [Isolate Elements from Parent Animations](#isolate-elements-from-parent-animations).
-
-**Popover closes or goes dead when clicked mid-transition:** named participants are skipped by hit-testing while a transition runs; clicks land on what's beneath and read as outside-clicks. Portal the popover (see [Isolate Elements from Parent Animations](#isolate-elements-from-parent-animations)); brief dead clicks during the transition remain — that's the price of the name.
-
-**Shared morph silently not firing:** `share` resolved to `none`. Either the VT has `default="none"` with no explicit `share` prop, or `share` is type-keyed and the navigation never adds the type — the link needs `transitionTypes` (or `addTransitionType` in the transition).
-
-**Prefetched content flashes even though Suspense never showed its fallback:** A content-side VT with `enter` became the topmost entering subtree during navigation. At the affected call site, wrap `Suspense` in a dedicated host DOM element. On navigation the host is inserted and suppresses the nested enter; on a real suspension the mounted host stays put and the nested VT enters when content resolves. Keep the host outside `Suspense`, not inside the shared cross-fade component. Existing call sites with a direct host need no change; a broad ancestor that persists or is reconciled in place is not a reliable guard.
-
-**Section below a list teleports instead of gliding:** it's outside any activated boundary, its VT has `default="none"` (which disables `update`), or it isn't an immediate sibling of the changing content. See [Layout Displacement Morph](#layout-displacement-morph).
-
-**`router.back()` and browser back/forward skip the directional slide:** traversals carry no transition types, so type-keyed maps resolve to `default` — untyped shared-element morphs still apply. Use `router.push()` for typed animations.
-
-**`flushSync` skips animations:** Use `startTransition` instead.
-
-**Only updates animate (no enter/exit):** Without `<Suspense>`, React treats swaps as updates. Conditionally render the VT itself, or wrap in `<Suspense>`.
-
-**Layout VT prevents page VTs from animating:** nested VTs skip their own enter/exit only when they mount/unmount *as one unit* with a parent VT. If page enter/exit is dead under a persistent layout VT, the usual culprit is a DOM node above the page VT. Keep VTs in pages, not layouts.
-
-**List reorder not animating with `useOptimistic`:** Optimistic values resolve before snapshot. Use committed state for list order.
-
-**TS error "Property 'default' is missing":** Type-keyed objects require a `default` key.
-
-**Hash fragments cause scroll jumps:** Navigate without hash; scroll programmatically after navigation.
-
-**Backdrop-blur flickers:** Use the [Backdrop-Blur Workaround](css-recipes.md#backdrop-blur-workaround).
-
-**`border-radius` lost during transitions:** Apply `border-radius` directly to the captured element.
-
-**Skeleton controls slide away:** Give matching controls the same `viewTransitionName`.
-
-**Batching:** Multiple updates during animation are batched. A→B→C→D becomes B→D.
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| No animation | Update did not run in a React Transition/Suspense/deferred update | Fix the trigger; do not call the browser API directly |
+| Shared morph does not run | Pair was not present in the same transition, name differs, or `share` resolved to `none` | Inspect both snapshots, prefetch/cache if appropriate, and verify the type path |
+| Duplicate-name warning | Two mounted instances own the same global name | Make the name conditional or include stable identity |
+| Prefetched content flashes | Content-side enter VT became the topmost inserted subtree | Add a call-site host outside Suspense |
+| Suspense content never fades | A host was added inside the reusable Crossfade | Move the host outside Suspense at the affected usage |
+| Heading dips on reveal | Fallback and content both render it | Move it outside the boundary or intentionally share it |
+| Section teleports after list changes | Only the list was wrapped | Wrap the displaced sibling and keep update enabled |
+| Modal/backdrop becomes darker | Two translucent snapshots overlap | Hide the old snapshot for that group |
+| Toast or menu flickers | The library's portal node mounts transiently | Name an always-mounted owner around the portal output |
+| UI freezes during animation | Root snapshot covers persistent chrome | Use the live-root and pointer-event rules |
+| `viewTransitionName: 'none'` changes nothing | `none` is the absence of a name | Assign a real unique name or remove the property |
+| Browser Back skips direction | History traversal has no transition type | Provide a calm default; keep shared morphs untyped when they should still run |

@@ -1,189 +1,92 @@
 # Implementation Workflow
 
-Follow these steps in order when adding view transitions to an app. Each step builds on the previous one.
+Use this workflow for a whole-app rollout or a broad review. For API behavior, read the official documentation linked from [`SKILL.md`](../SKILL.md).
 
-## Step 1: Audit the App
+## 1. Audit Before Editing
 
-Before writing any code, scan the codebase thoroughly. Search for:
+Search for existing transition code and navigation triggers:
 
-- **Every `<Link>` and `router.push`** — these are your navigation triggers. Open every file that contains one.
-- **Every `<Suspense>` boundary** — each one is a candidate for a reveal animation. Check what its fallback renders.
-- **Every page/route component** — list them all. Each page needs a VT placement decision.
-- **Persistent elements** — headers, navbars, sidebars, sticky controls that stay on screen across navigations. These need `viewTransitionName` isolation.
-- **Shared visual elements** — images, cards, or avatars that appear on both a source and target view (e.g., a thumbnail in a list and the same image on a detail page).
-- **Skeleton-to-content control pairs** — if a Suspense fallback renders a control (search input, tab bar) that also exists in the real content, both need a matching `viewTransitionName`.
-
-Then classify every navigation and produce a navigation map:
-
-```
-| Route           | Navigates to         | Direction    | VT pattern            |
-|-----------------|----------------------|--------------|-----------------------|
-| /               | /detail/[id]         | forward      | directional slide     |
-| /detail/[id]    | /                    | back         | directional slide     |
-| /detail/[id]    | /detail/[other]      | sequential   | directional slide (ordered prev/next) or key+share crossfade |
-| /tab/[a]        | /tab/[b]             | lateral      | key+share crossfade   |
-| (Suspense)      | (content loads)      | —            | slide-up reveal       |
+```bash
+rg -n "ViewTransition|viewTransitionName|transitionTypes|addTransitionType|startTransition|Suspense|useDeferredValue" app components features
 ```
 
-For each shared element (`name` prop), note every navigation where a pair forms and where it doesn't — this determines whether you need `enter`/`exit` as a fallback alongside `share`.
+Record each candidate in a small table:
 
-## Step 2: Add CSS Recipes
+| Surface | Trigger | Lifecycle | Intended meaning |
+|---|---|---|---|
+| Route content | navigation | replaced | hierarchy or reveal |
+| Card/detail media | navigation | paired | same object |
+| Filtered list | deferred update | persists | items moved |
+| Modal or menu | transition | mounts/unmounts | appeared/disappeared |
+| Player/nav/toast | unrelated | persists | should stay still/live |
 
-Copy the **complete** CSS recipe set from [css-recipes.md](css-recipes.md) into your global stylesheet. This includes timing variables, shared keyframes, fade, slide (vertical), directional navigation (forward/back), shared element morph, persistent element isolation, and reduced motion.
+Do not infer lifecycle from component names. Inspect where the boundary mounts relative to layouts, Suspense, conditionals, portals, and keyed children.
 
-Do not write your own animation CSS — the recipes handle staggered timing, motion blur on morphs, and reduced motion that are easy to get wrong. You can customize timing variables (`--duration-exit`, `--duration-enter`, `--duration-move`) after the initial setup.
+## 2. Establish One Transition
 
-## Step 3: Isolate Persistent Elements
+Implement the smallest semantic layer first:
 
-For every persistent element identified in Step 1, add a `viewTransitionName` style to pull it out of the page content's transition snapshot:
+- shared identity for the same object across views;
+- enter/exit for a component appearing or disappearing;
+- update for mounted content or list movement;
+- typed navigation for hierarchy;
+- reveal for suspended content.
 
-```jsx
-<header style={{ viewTransitionName: "site-header" }}>...</header>
-```
+Verify that layer before adding another. Nested boundaries can claim the mutation that an outer boundary expected to animate.
 
-Then add the [Persistent Element Isolation](css-recipes.md#persistent-element-isolation) CSS (prevents the element from animating during page transitions). If the element uses `backdrop-blur` or `backdrop-filter`, use the [Backdrop-Blur Workaround](css-recipes.md#backdrop-blur-workaround) instead.
+## 3. Handle Persistent UI
 
-If a Suspense fallback mirrors a persistent control (e.g., a skeleton search input), give both the real control and the skeleton the same `viewTransitionName` so they morph in place.
+Audit fixed or portaled surfaces before enabling broad route motion:
 
-## Step 4: Add Directional Page Transitions
+- navigation bars and sidebars;
+- audio/video players;
+- theme or demo toolbars;
+- dialogs, popovers, menus, and tooltips;
+- toast providers.
 
-For hierarchical navigations identified in Step 1, tag the navigation direction using `addTransitionType` inside `startTransition`:
+Isolate only elements that visually misbehave. If a third-party portal mounts its own DOM, put its provider/output inside an always-mounted named owner rather than relying on the portal's transient node. See [Persistent UI and portals](patterns.md#persistent-ui-and-portals).
 
-```jsx
-startTransition(() => {
-  addTransitionType('nav-forward');
-  router.push('/detail/1');
-});
-```
+## 4. Add Suspense Deliberately
 
-Then wrap each **page component** (not layout) in a type-keyed `<ViewTransition>`:
+For every animated boundary, test two distinct paths:
 
-```jsx
-<ViewTransition
-  enter={{
-    "nav-forward": "nav-forward",
-    "nav-back": "nav-back",
-    default: "none",
-  }}
-  exit={{
-    "nav-forward": "nav-forward",
-    "nav-back": "nav-back",
-    default: "none",
-  }}
-  default="none"
->
-  <div>...page content...</div>
-</ViewTransition>
-```
+1. Content is ready and no fallback appears.
+2. The fallback commits and content reveals later.
 
-The `nav-forward` and `nav-back` CSS classes from [Directional Navigation](css-recipes.md#directional-navigation) produce horizontal slides. For simpler apps where directional motion isn't needed, a bare `<ViewTransition default="none">` wrapper with `enter="fade-in"` / `exit="fade-out"` works too.
+If an enter-only content VT flashes on the first path, use the call-site host pattern in [Warm navigation versus cold reveal](patterns.md#warm-navigation-versus-cold-reveal). Do not add the host globally; existing DOM structure may already provide it.
 
-Extract this into a reusable component so every page doesn't repeat the verbose type map:
+Check fallback and content for duplicated headings, controls, or media. Move stable UI outside the boundary when possible.
 
-```jsx
-export function DirectionalTransition({ children }: { children: React.ReactNode }) {
-  return (
-    <ViewTransition
-      enter={{ 'nav-forward': 'nav-forward', 'nav-back': 'nav-back', default: 'none' }}
-      exit={{ 'nav-forward': 'nav-forward', 'nav-back': 'nav-back', default: 'none' }}
-      default="none"
-    >
-      {children}
-    </ViewTransition>
-  );
-}
-```
+## 5. Add CSS by Pattern
 
-This also becomes the single place to adjust if you add new transition types later.
+Copy only the relevant section from [CSS recipes](css-recipes.md). Avoid a global animation rule that accidentally animates every named element.
 
-**Rules:**
-- Always pair `enter` with `exit` — without an exit animation, the old page disappears instantly while the new one animates in.
-- Always include `default: "none"` in type map objects and `default="none"` on the component — otherwise it fires on every transition.
-- Place the directional `<ViewTransition>` in each page component, not in a layout. Layouts persist across navigations and never trigger enter/exit.
-- Only use directional slides for hierarchical navigation or ordered sequences (prev/next). Lateral/sibling navigation (tab-to-tab) should use a bare `<ViewTransition>` (cross-fade) or `default="none"`.
+At minimum, include reduced motion. Add the live-root rule only when persistent unnamed UI freezes or blocks interaction. Add portal isolation only for surfaces that need it.
 
-## Step 5: Add Suspense Reveals
+## 6. Verify the Matrix
 
-For every `<Suspense>` boundary identified in Step 1, wrap the fallback and content in separate `<ViewTransition>`s:
+For each route or interaction, verify:
 
-```jsx
-<Suspense
-  fallback={
-    <ViewTransition exit="slide-down">
-      <Skeleton />
-    </ViewTransition>
-  }
->
-  <ViewTransition enter="slide-up" default="none">
-    <AsyncContent />
-  </ViewTransition>
-</Suspense>
-```
+- warm/prefetched destination;
+- cold/suspended destination;
+- forward navigation and browser history;
+- same-route parameter or query changes;
+- optimistic and committed states;
+- revalidation after the screen is already visible;
+- open overlays and pointer input during the animation;
+- reduced motion.
 
-This example uses `slide-down` / `slide-up` for directional vertical motion. For a simpler reveal, a bare `<ViewTransition>` around the `<Suspense>` gives a cross-fade with zero configuration. Choose based on the spatial meaning — consult the "Choosing the Right Animation Style" table in the main skill file.
+Use a recording for brief flicker and geometry bugs. Screenshots alone often miss double snapshots and momentary opacity dips.
 
-If the content-side VT uses `enter` and can also mount during route navigation, verify both warm and cold paths. With prefetched data, the content may never show the fallback; if that VT is the topmost entering subtree, its `enter` still runs and cached content flashes. Put a dedicated host DOM element immediately outside `Suspense` at the usage site. The host suppresses the nested enter during navigation, then remains mounted so the nested VT can animate a later fallback-to-content reveal. Do not add the host inside the shared cross-fade component—that would suppress the reveal—or rely on a broad page/layout wrapper that React may preserve across the navigation.
+## Review Checklist
 
-**Rules:**
-- Always use `default="none"` on the content `<ViewTransition>` to prevent re-animation on revalidation or unrelated transitions.
-- Use simple string props (not type maps) on Suspense `<ViewTransition>`s — Suspense resolves fire as separate transitions with no type, so type-keyed props won't match.
-- For reveal-only fades in navigable UI, audit each call site and add the host outside `Suspense` only where it is missing; test the cached/no-fallback path as well as the suspended path.
-- A fallback/content `share` pair morphs between snapshots. Use it only when that interpolation is desired and does not distort layout or geometry.
-- If the same element appears in **both** the fallback and the content (a title, a heading), it flickers on reveal — an opacity dip. Render it **outside** the `<Suspense>` boundary (or pin it), so it isn't in both. See [Suspense reveal flicker](patterns.md#suspense-reveal-flicker).
-
-## Step 6: Add Shared Element Transitions
-
-For every shared visual element identified in Step 1, add matching named `<ViewTransition>` wrappers on both the source and target views:
-
-```jsx
-// On the source view (e.g., list/grid page)
-<ViewTransition name={`photo-${photo.id}`} share="morph" default="none">
-  <Image src={photo.src} ... />
-</ViewTransition>
-
-// On the target view (e.g., detail page) — same name
-<ViewTransition name={`photo-${photo.id}`} share="morph">
-  <Image src={photo.src} ... />
-</ViewTransition>
-```
-
-The `share="morph"` class uses the [Shared Element Morph](css-recipes.md#shared-element-morph) recipe (controlled duration + motion blur). For a simpler cross-fade, use `share="auto"` (browser default).
-
-When list items contain shared elements, compose both patterns with two nested `<ViewTransition>` layers — see [Composing Shared Elements with List Identity](../SKILL.md#composing-shared-elements-with-list-identity).
-
-**Rules:**
-- Names must be globally unique — use prefixes like `photo-${id}`.
-- Add `default="none"` on list-side shared elements to prevent per-item cross-fades on filter/search updates.
-- The target must be **in the DOM at navigation time** for the pair to form. If it's behind a Suspense fallback (not rendered yet), no pair forms and it won't morph. It works when the target is present at the snapshot — render it above the data boundary, or have its data **cached/prefetched** so it resolves in time.
-
-## Step 7: Verify Each Navigation Path
-
-Walk through every row in the navigation map from Step 1 and confirm:
-
-- Does the VT mount/unmount on this navigation, or does it stay mounted (same-route)?
-- For named VTs: does a shared pair form? If not, does `enter`/`exit` provide a fallback?
-- Does `default="none"` block an animation you actually want?
-- Do persistent elements stay static (not sliding with page content)?
-- Do Suspense reveals animate independently from directional navigations?
-
-If any path produces no animation or competing animations, revisit the relevant step.
-
----
-
-## Common Mistakes
-
-- **Bare `<ViewTransition>` without props** — without `default="none"`, it fires the browser's default cross-fade on every transition (every navigation, every Suspense resolve, every revalidation). Always set `default="none"` and explicitly enable only the triggers you want.
-- **Directional `<ViewTransition>` in a layout** — layouts persist across navigations and never unmount/remount. `enter`/`exit` props won't fire on route changes. Place the outer type-keyed `<ViewTransition>` in each page component.
-- **Fade-out exit with shared element morphs** — the page dissolving conflicts with the morph. Use a directional slide exit instead.
-- **Writing custom animation CSS** — the recipes in [css-recipes.md](css-recipes.md) handle staggered timing, motion blur on morphs, and reduced motion. Copy them; don't reinvent them.
-- **Missing `default: "none"` in type-keyed objects** — TypeScript requires a `default` key, and without it the fallback is `"auto"` which fires on every transition.
-- **Type maps on Suspense reveals** — Suspense resolves fire as separate transitions with no type. Type-keyed props won't match — use simple string props instead.
-- **Cached content fades even though no fallback appeared** — a content-side `enter` VT became the topmost inserted subtree during navigation. Add a dedicated host element immediately outside `Suspense` at that call site so navigation inserts the host, while only a later Suspense resolution inserts the VT. Do not move the host inside the cross-fade component.
-- **Raw `viewTransitionName` CSS to trigger animations** — React only calls `document.startViewTransition` when `<ViewTransition>` components are in the tree. A bare `viewTransitionName` style is for isolating elements from a parent's snapshot, not for triggering animations.
-- **`update` trigger for same-route navigations** — nested VTs inside the content steal the mutation from the parent, so `update` never fires on the outer VT. Use `key` + `name` + `share` instead.
-- **Named VT in a reusable component** — if a component with a named VT is rendered in both a modal/popover *and* a page, both mount simultaneously and break the morph. Make the name conditional or move it to the specific consumer.
-- **`router.back()` for back navigation** — traversals carry no transition types, so type-keyed animations don't play (untyped morphs still can). Use `router.push()` with an explicit URL for a fully animated back affordance.
-
----
-
-For Next.js-specific implementation steps (config flag, `transitionTypes` on `<Link>`, same-route dynamic segments), see [nextjs.md](nextjs.md).
+- [ ] The animation communicates a specific relationship.
+- [ ] Every name is unique among simultaneously mounted elements.
+- [ ] Shared pairs exist in the same transition.
+- [ ] `default="none"` has not disabled a needed trigger.
+- [ ] Type maps have a `default` path.
+- [ ] Suspense reveals do not depend on navigation types.
+- [ ] Persistent and portaled UI stays stable and interactive.
+- [ ] Warm and cold paths both behave intentionally.
+- [ ] Unrelated updates do not animate.
+- [ ] Reduced motion is present.
