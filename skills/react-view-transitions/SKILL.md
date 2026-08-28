@@ -67,31 +67,12 @@ Shared identity and list identity are separate. A list item containing a shared 
 
 The detailed implementations live in the references; these are the cases most often missed:
 
-- **Warm navigation versus cold reveal:** keep a reusable `Crossfade` wrapper-free. At affected navigable call sites, put a persistent DOM host immediately outside `Suspense` so warm content does not replay its enter while a later cold reveal still can. See [Suspense Fallback to Content](#suspense-fallback-to-content).
 - **Optimistic controls:** update labels and pending styles optimistically, but keep named shared indicators tied to committed route state.
 - **Appended pages:** render the initial page normally and animate only pages appended after interaction.
 - **Layout displacement:** wrap the sibling that moves, not only the content whose size changed.
 - **Persistent and portaled UI:** isolate fixed chrome and floating surfaces with stable names. For third-party portals, name an always-mounted owner.
 - **Fallback/content duplicates:** move repeated headings and controls outside Suspense, or give them deliberate shared identity, to avoid an opacity dip.
 - **Live app shells:** disable the root snapshot animation when unnamed persistent chrome must stay live and interactive.
-
-## Suspense Fallback to Content
-
-A simple fallback/content swap can wrap the boundary as documented by React. For an enter-only reveal inside navigable content, use the call-site host pattern:
-
-```tsx
-function Crossfade({ children }: { children: React.ReactNode }) {
-  return <ViewTransition enter="auto" default="none">{children}</ViewTransition>;
-}
-
-<div>
-  <Suspense fallback={<Skeleton />}>
-    <Crossfade><Content /></Crossfade>
-  </Suspense>
-</div>
-```
-
-On warm navigation, the host is the topmost insertion and suppresses the nested enter. On a cold path, the host persists with the fallback and the nested VT enters when content resolves. Do not put the host inside `Crossfade`, and do not add one where a direct host already exists. A fallback/content `share` pair is a geometry morph; use it only when that interpolation is intended.
 
 ## Verification
 
@@ -105,3 +86,7 @@ Check the behavior users see:
 - revalidation and unrelated transitions, which should remain quiet.
 
 Use screenshots or recordings when timing, geometry, or flicker is the issue.
+
+## Full Compiled Document
+
+For the complete standalone guide with all references expanded: `AGENTS.md`.

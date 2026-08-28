@@ -113,6 +113,8 @@ function SortControl() {
 
 List items wrapped in `<ViewTransition key={item.id}>` will animate reorder. This is the server-component alternative to the client-side [Searchable Grid](patterns.md#searchable-grid-with-usedeferredvalue) pattern.
 
+For immediate control feedback while the route commits, use `useOptimistic` for the button state but keep the animated list tied to the committed sort value. See [Exclude Elements with `useOptimistic`](patterns.md#exclude-elements-with-useoptimistic).
+
 ---
 
 ## Routing-Driven Tabs
@@ -165,20 +167,6 @@ Directional slides + Suspense reveals coexist because they fire at different mom
   </div>
 </ViewTransition>
 ```
-
-For a reveal-only fade without a directional page transition, add a dedicated host element immediately outside the Suspense boundary at the usage site:
-
-```tsx
-<div>
-  <Suspense fallback={<Skeleton />}>
-    <ViewTransition enter="auto" default="none">
-      <Content />
-    </ViewTransition>
-  </Suspense>
-</div>
-```
-
-This distinction matters with prefetched routes. If `Content` is already ready, the host is the topmost entering subtree and the nested fade does not run. If it suspends, the host mounts with the fallback and remains in place; the nested VT enters only when the content resolves. Keep the host outside `Suspense`; putting it inside a reusable `Crossfade` would suppress the reveal. Audit call sites before changing anything: an existing direct host already provides the guard, while a layout or broad ancestor may persist across navigation and does not guarantee it.
 
 ---
 

@@ -124,12 +124,9 @@ For every `<Suspense>` boundary identified in Step 1, wrap the fallback and cont
 
 This example uses `slide-down` / `slide-up` for directional vertical motion. For a simpler reveal, a bare `<ViewTransition>` around the `<Suspense>` gives a cross-fade with zero configuration. Choose based on the spatial meaning described in the main skill.
 
-If the content-side VT uses `enter` and can also mount during route navigation, verify both warm and cold paths. With prefetched data, the content may never show the fallback; if that VT is the topmost entering subtree, its `enter` still runs and cached content flashes. Put a dedicated host DOM element immediately outside `Suspense` at the usage site. The host suppresses the nested enter during navigation, then remains mounted so the nested VT can animate a later fallback-to-content reveal. Do not add the host inside the shared cross-fade component—that would suppress the reveal—or rely on a broad page/layout wrapper that React may preserve across the navigation.
-
 **Rules:**
 - Always use `default="none"` on the content `<ViewTransition>` to prevent re-animation on revalidation or unrelated transitions.
 - Use simple string props (not type maps) on Suspense `<ViewTransition>`s — Suspense resolves fire as separate transitions with no type, so type-keyed props won't match.
-- For reveal-only fades in navigable UI, audit each call site and add the host outside `Suspense` only where it is missing; test the cached/no-fallback path as well as the suspended path.
 - A fallback/content `share` pair morphs between snapshots. Use it only when that interpolation is desired and does not distort layout or geometry.
 - If the same element appears in **both** the fallback and the content (a title, a heading), it flickers on reveal — an opacity dip. Render it **outside** the `<Suspense>` boundary (or pin it), so it isn't in both. See [Suspense reveal flicker](patterns.md#suspense-reveal-flicker).
 
@@ -180,7 +177,6 @@ If any path produces no animation or competing animations, revisit the relevant 
 - **Copying every CSS recipe** — broad rules animate surfaces the app never intended to include. Start from the official example for the chosen pattern, then add only the focused recipes the audit requires.
 - **Missing `default: "none"` in type-keyed objects** — TypeScript requires a `default` key, and without it the fallback is `"auto"` which fires on every transition.
 - **Type maps on Suspense reveals** — Suspense resolves fire as separate transitions with no type. Type-keyed props won't match — use simple string props instead.
-- **Cached content fades even though no fallback appeared** — a content-side `enter` VT became the topmost inserted subtree during navigation. Add a dedicated host element immediately outside `Suspense` at that call site so navigation inserts the host, while only a later Suspense resolution inserts the VT. Do not move the host inside the cross-fade component.
 - **Raw `viewTransitionName` CSS to trigger animations** — React only calls `document.startViewTransition` when `<ViewTransition>` components are in the tree. A bare `viewTransitionName` style is for isolating elements from a parent's snapshot, not for triggering animations.
 - **`update` trigger for same-route navigations** — nested VTs inside the content steal the mutation from the parent, so `update` never fires on the outer VT. Use `key` + `name` + `share` instead.
 - **Named VT in a reusable component** — if a component with a named VT is rendered in both a modal/popover *and* a page, both mount simultaneously and break the morph. Make the name conditional or move it to the specific consumer.
