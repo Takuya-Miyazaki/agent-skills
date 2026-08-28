@@ -2,7 +2,7 @@
 
 Ready-to-use CSS for `<ViewTransition>` props. Copy into your global stylesheet.
 
-This file contains the complete CSS recipe set for the patterns in this skill. Copy only what the app needs. Use the [official Next.js guide](https://nextjs.org/docs/app/guides/view-transitions) and its [demo](https://github.com/vercel-labs/react-view-transitions-demo) as references for deciding what should animate, not as an additional CSS baseline.
+This file contains the complete CSS recipe set for the patterns in this skill. Copy only what the app needs.
 
 ---
 

@@ -134,20 +134,6 @@ An element rendered in **both** the fallback and the content flickers (opacity d
 
 Don't put a manual `viewTransitionName` on the root DOM node inside `<ViewTransition>` — React's auto-name overrides it.
 
-## Appended Async Pages
-
-The initial page is already part of the screen. Animate only pages appended after interaction so the arrival animation does not replay when the paginator resets, navigates, or hydrates:
-
-```tsx
-{pages.map((page, index) => (
-  <Suspense key={index} fallback={<RowsSkeleton />}>
-    {index === 0 ? <Page page={page} /> : <Crossfade><Page page={page} /></Crossfade>}
-  </Suspense>
-))}
-```
-
-This applies to URL-driven pagination and client paginators that retain server-rendered pages in state. Give each appended page its own Suspense boundary so one pending page does not replace the existing list.
-
 ## Sliding Indicator (tabs)
 
 One shared-name indicator rendered under the **active** tab morphs between positions on change (slide the group, disable old/new — see [Sliding Indicator](css-recipes.md#sliding-indicator-tab-underline--segmented-pill)). Render it only under the active tab so exactly one element holds `indicatorName`; use a distinct `indicatorName` per tab strip. Trigger the state change inside `startTransition` so the move animates. Whatever owns `active` drives it — local state here, routing in Next (see [Routing-Driven Tabs](nextjs.md#routing-driven-tabs)).

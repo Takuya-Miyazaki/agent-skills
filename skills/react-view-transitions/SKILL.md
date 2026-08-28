@@ -69,7 +69,6 @@ Shared identity and list identity are separate. A list item containing a shared 
 The detailed implementations live in the references; these are the cases most often missed:
 
 - **Optimistic controls:** update labels and pending styles optimistically, but keep named shared indicators tied to committed route state.
-- **Appended pages:** render the initial page normally and animate only pages appended after interaction.
 - **Layout displacement:** wrap the sibling that moves, not only the content whose size changed.
 - **Persistent and portaled UI:** isolate fixed chrome and floating surfaces with stable names. For third-party portals, name an always-mounted owner.
 - **Fallback/content duplicates:** move repeated headings and controls outside Suspense, or give them deliberate shared identity, to avoid an opacity dip.

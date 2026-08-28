@@ -31,7 +31,7 @@ For each shared element (`name` prop), note every navigation where a pair forms 
 
 ## Step 2: Add CSS Recipes
 
-Use the official guide's examples to decide what should animate. Then copy only the applicable sections from [css-recipes.md](css-recipes.md), which contains the complete recipe set for this skill. Always include reduced motion. Add live-root, persistent-element, backdrop, or floating-element rules only when the audit found those surfaces.
+Choose the animation pattern from the audit and this skill's guidance, then copy only the applicable sections from [css-recipes.md](css-recipes.md). Always include reduced motion. Add live-root, persistent-element, backdrop, or floating-element rules only when the audit found those surfaces.
 
 Customize timing after the structure works. Keep ordinary crossfades opacity-only; scope blur to a specific shared morph when it is intentional.
 

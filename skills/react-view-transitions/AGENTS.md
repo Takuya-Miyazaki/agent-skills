@@ -70,7 +70,6 @@ Shared identity and list identity are separate. A list item containing a shared 
 The detailed implementations live in the references; these are the cases most often missed:
 
 - **Optimistic controls:** update labels and pending styles optimistically, but keep named shared indicators tied to committed route state.
-- **Appended pages:** render the initial page normally and animate only pages appended after interaction.
 - **Layout displacement:** wrap the sibling that moves, not only the content whose size changed.
 - **Persistent and portaled UI:** isolate fixed chrome and floating surfaces with stable names. For third-party portals, name an always-mounted owner.
 - **Fallback/content duplicates:** move repeated headings and controls outside Suspense, or give them deliberate shared identity, to avoid an opacity dip.
@@ -124,7 +123,7 @@ For each shared element (`name` prop), note every navigation where a pair forms 
 
 ## Step 2: Add CSS Recipes
 
-Use the official guide's examples to decide what should animate. Then copy only the applicable sections from [css-recipes.md](css-recipes.md), which contains the complete recipe set for this skill. Always include reduced motion. Add live-root, persistent-element, backdrop, or floating-element rules only when the audit found those surfaces.
+Choose the animation pattern from the audit and this skill's guidance, then copy only the applicable sections from [css-recipes.md](css-recipes.md). Always include reduced motion. Add live-root, persistent-element, backdrop, or floating-element rules only when the audit found those surfaces.
 
 Customize timing after the structure works. Keep ordinary crossfades opacity-only; scope blur to a specific shared morph when it is intentional.
 
@@ -417,20 +416,6 @@ An element rendered in **both** the fallback and the content flickers (opacity d
 
 Don't put a manual `viewTransitionName` on the root DOM node inside `<ViewTransition>` — React's auto-name overrides it.
 
-## Appended Async Pages
-
-The initial page is already part of the screen. Animate only pages appended after interaction so the arrival animation does not replay when the paginator resets, navigates, or hydrates:
-
-```tsx
-{pages.map((page, index) => (
-  <Suspense key={index} fallback={<RowsSkeleton />}>
-    {index === 0 ? <Page page={page} /> : <Crossfade><Page page={page} /></Crossfade>}
-  </Suspense>
-))}
-```
-
-This applies to URL-driven pagination and client paginators that retain server-rendered pages in state. Give each appended page its own Suspense boundary so one pending page does not replace the existing list.
-
 ## Sliding Indicator (tabs)
 
 One shared-name indicator rendered under the **active** tab morphs between positions on change (slide the group, disable old/new — see [Sliding Indicator](css-recipes.md#sliding-indicator-tab-underline--segmented-pill)). Render it only under the active tab so exactly one element holds `indicatorName`; use a distinct `indicatorName` per tab strip. Trigger the state change inside `startTransition` so the move animates. Whatever owns `active` drives it — local state here, routing in Next (see [Routing-Driven Tabs](nextjs.md#routing-driven-tabs)).
@@ -618,7 +603,7 @@ The `types` array (second argument) lets you vary animation based on transition 
 
 Ready-to-use CSS for `<ViewTransition>` props. Copy into your global stylesheet.
 
-This file contains the complete CSS recipe set for the patterns in this skill. Copy only what the app needs. Use the [official Next.js guide](https://nextjs.org/docs/app/guides/view-transitions) and its [demo](https://github.com/vercel-labs/react-view-transitions-demo) as references for deciding what should animate, not as an additional CSS baseline.
+This file contains the complete CSS recipe set for the patterns in this skill. Copy only what the app needs.
 
 ---
 
