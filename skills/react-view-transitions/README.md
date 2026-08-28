@@ -4,12 +4,12 @@ Practical guidance for React and Next.js View Transitions. The package points ag
 
 ## Files
 
-- [`SKILL.md`](SKILL.md) — entrypoint, workflow, and high-value rules
+- [`SKILL.md`](SKILL.md) — concise entrypoint and routing guide
 - [`AGENTS.md`](AGENTS.md) — short standalone summary
 - [`references/implementation.md`](references/implementation.md) — whole-app audit and rollout
-- [`references/patterns.md`](references/patterns.md) — production patterns and debugging
+- [`references/patterns.md`](references/patterns.md) — detailed patterns and debugging
 - [`references/nextjs.md`](references/nextjs.md) — Next.js routing, prefetch, and Suspense behavior
-- [`references/css-recipes.md`](references/css-recipes.md) — app-specific CSS refinements
+- [`references/css-recipes.md`](references/css-recipes.md) — reusable CSS
 
 ## Install
 
